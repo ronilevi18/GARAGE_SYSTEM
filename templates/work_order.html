@@ -1,0 +1,123 @@
+{% extends "shell.html" %}
+{% set active = 'wo' %}
+{% block content %}
+<div class="page-head">
+  <h2 class="page-title">פתיחת תיק עבודה חדש</h2>
+  <p class="page-sub">בחרו לקוח ורכב מהמאגר או הוסיפו חדש, מלאו פרטי נזק ופתחו תיק.<br>מספר התיק, התאריך וסטטוס "פתוח" נוצרים אוטומטית.</p>
+</div>
+
+<div class="grid-2 equal">
+  <div class="card">
+    <div class="card-head"><span class="dot"></span><h2>לקוח ורכב</h2></div>
+    <p class="hint">מסלול א': בחירה מהמאגר · מסלול ב': יצירת לקוח ורכב חדש</p>
+
+    <div class="section-label">מסלול א' — בחירת לקוח ורכב קיימים</div>
+    <div class="field">
+      <label for="existing">בחירה מהמאגר</label>
+      <select id="existing">
+        <option value="">— ללא, מעבר למסלול ב' —</option>
+        {% for r in existing %}
+        <option value="{{ r.customer_id }}|{{ r.vehicle_id }}">{{ r.name }} · {{ r.license_plate }} · {{ r.model }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="section-label">מסלול ב' — יצירת לקוח ורכב חדש</div>
+    <div class="form-grid">
+      <div class="field"><label>סוג לקוח</label><select id="customer_type"><option value="Private">פרטי</option><option value="Business">עסקי</option></select></div>
+      <div class="field"><label>שם <span class="req">*</span></label><input type="text" id="name"></div>
+      <div class="field"><label>טלפון <span class="req">*</span></label><input type="text" id="phone_number" inputmode="numeric" maxlength="10" placeholder="10 ספרות"></div>
+      <div class="field"><label>ת"ז / ח"פ</label><input type="text" id="id_number"></div>
+      <div class="field"><label>כתובת</label><input type="text" id="address"></div>
+      <div class="field"><label>הערות</label><input type="text" id="notes"></div>
+      <div class="field"><label>מספר רישוי <span class="req">*</span></label><input type="text" id="license_plate"></div>
+      <div class="field"><label>דגם <span class="req">*</span></label><input type="text" id="model"></div>
+      <div class="field"><label>שנה</label><input type="text" id="year" inputmode="numeric" maxlength="4" placeholder="לדוגמה 2022"></div>
+      <div class="field"><label>סוג רכב</label><select id="vehicle_type"><option>Private</option><option>Business</option><option>Electric</option><option selected>Luxury</option></select></div>
+      <div class="field"><label>קילומטראז'</label><input type="text" id="km" inputmode="numeric" placeholder="לדוגמה 45000"></div>
+      <div class="field"><label>סוג טיפול נדרש</label><select id="work_type"><option value="BodyRepair">פחחות</option><option value="PaintServices">צבע</option><option value="ThirdPartyAccident">תאונת צד ג'</option></select></div>
+    </div>
+
+    <div class="section-label">פרטי תאונה / נזק</div>
+    <div class="field"><textarea id="accident_details" placeholder="תיאור הנזק / נסיבות התאונה..."></textarea></div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="openCase()">פתיחת תיק עבודה</button>
+      <button class="btn btn-ghost" onclick="location.reload()">ניקוי</button>
+    </div>
+    <div id="alert" class="alert"></div>
+  </div>
+
+  <div class="right-col">
+    <div class="card compact">
+      <div class="card-head"><span class="dot"></span><h2>תיקים פעילים</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>מס' תיק</th><th>מספר רכב</th><th>סוג</th><th>סטטוס</th></tr></thead>
+          <tbody>
+            {% for c in active_cases %}
+            <tr>
+              <td class="mono">{{ c.case_number }}</td>
+              <td class="mono">{{ c.license_plate }}</td>
+              <td>{{ {'BodyRepair':'פחחות','PaintServices':'צבע','ThirdPartyAccident':'תאונת צד ג׳'}.get(c.work_type, c.work_type) }}</td>
+              <td><span class="badge {{ c.status|lower }}">{{ c.status }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="center muted">אין תיקים פעילים.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if total_pages > 1 %}
+      <div class="pager">
+        <a href="{{ url_for('work_order', page=page-1) if page>1 else '#' }}" class="page-btn {{ 'disabled' if page==1 }}">‹</a>
+        <span class="page-info">דף {{ page }} מתוך {{ total_pages }}</span>
+        <a href="{{ url_for('work_order', page=page+1) if page<total_pages else '#' }}" class="page-btn {{ 'disabled' if page==total_pages }}">›</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card mini-stats">
+      <div class="ms"><div class="ms-n">{{ summary.active }}</div><div class="ms-l">תיקים פעילים</div></div>
+      <div class="ms"><div class="ms-n">{{ summary.today }}</div><div class="ms-l">נפתחו היום</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-icon">✓</div>
+    <h3>הפרטים נקלטו בהצלחה</h3>
+    <p id="modal-text"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function collectForm() {
+  const ids = ["customer_type","name","phone_number","id_number","address","notes","license_plate","model","year","vehicle_type","km","work_type","accident_details"];
+  const fd = new FormData();
+  ids.forEach(id => fd.append(id, document.getElementById(id).value));
+  const ex = document.getElementById("existing").value;
+  if (ex) { const [cid,vid] = ex.split("|"); fd.append("existing_customer_id", cid); fd.append("existing_vehicle_id", vid); }
+  return fd;
+}
+function showAlert(msg){ const el=document.getElementById("alert"); el.className="alert show error"; el.textContent=msg; }
+function showModal(text){
+  document.getElementById("modal-text").textContent=text;
+  const ov=document.getElementById("modal-overlay"); ov.classList.add("show");
+  let done=false;
+  const close=()=>{ if(done) return; done=true; ov.classList.remove("show"); location.reload(); };
+  ov.addEventListener("click", close);          // לחיצה בכל מקום סוגרת
+  setTimeout(close, 2500);                        // או אוטומטית אחרי 2.5 שניות
+}
+async function openCase(){
+  document.getElementById("alert").className="alert";
+  const r=await fetch("{{ url_for('wo_open') }}",{method:"POST",body:collectForm()});
+  const d=await r.json();
+  if(d.ok){ showModal(`נפתח תיק עבודה ${d.result.case_number} בסטטוס פתוח.`); }
+  else { showAlert(d.error); }
+}
+</script>
+{% endblock %}

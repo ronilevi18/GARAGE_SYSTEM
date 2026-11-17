@@ -1,0 +1,230 @@
+{% extends "shell.html" %}
+{% set active = 'dash' %}
+{% block content %}
+<div class="page-head">
+  <h2 class="page-title">{% if is_manager %}לוח משימות · כלל העובדים{% else %}לוח המשימות שלי{% endif %}</h2>
+  <p class="page-sub">
+    {% if is_manager %}הצגת כלל המשימות של העובדים, ממוינות לפי דחיפות.<br>משימה שהושלמה חוזרת אליך — שחרר אותה לעובד הבא בשרשרת, או הודע ללקוח שהרכב מוכן לאיסוף.
+    {% else %}המשימות הפעילות שהוקצו לך, ממוינות לפי דחיפות.<br>עדכנו סטטוס ישירות; אפשר לדווח על חריגה אם לא ניתן להמשיך.{% endif %}
+  </p>
+</div>
+
+<div class="stats">
+  <div class="stat accent"><div class="n">{{ tasks|length }}</div><div class="l">{% if is_manager %}סך המשימות{% else %}משימות פעילות{% endif %}</div></div>
+  <div class="stat"><div class="n">{{ tasks|selectattr('status','equalto','InProgress')|list|length }}</div><div class="l">בביצוע</div></div>
+  {% if is_manager %}<div class="stat"><div class="n">{{ tasks|selectattr('status','equalto','Completed')|list|length }}</div><div class="l">ממתינות לשחרור</div></div>
+  {% else %}<div class="stat"><div class="n">{{ tasks|selectattr('status','equalto','NotStarted')|list|length }}</div><div class="l">טרם החלו</div></div>{% endif %}
+</div>
+
+{% if is_manager and awaiting %}
+<div class="card" style="border-color:var(--cyan);border-width:2px">
+  <div class="card-head"><span class="dot"></span><h2>תיקים בקבלה — ממתינים לסיווג ({{ awaiting|length }})</h2></div>
+  <p class="hint">תיק חדש מחכה בקבלה. בחרו עובד, תחנה וכתבו את המשימה (מלל) — זה ייצור משימה ויקדם את הרכב.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>מס' תיק</th><th>רכב</th><th>סוג</th><th>תיאור הנזק</th><th>סיווג</th></tr></thead>
+      <tbody>
+        {% for a in awaiting %}
+        <tr>
+          <td class="mono">{{ a.case_number }}</td>
+          <td class="mono">{{ a.license_plate }}</td>
+          <td>{{ {'BodyRepair':'פחחות','PaintServices':'צבע','ThirdPartyAccident':'תאונת צד ג׳'}.get(a.work_type, a.work_type) }}</td>
+          <td style="max-width:200px;font-size:.85rem">{{ a.accident_details }}</td>
+          <td><button class="btn btn-primary btn-sm" onclick="openAssign({{ a.work_case_id }}, '{{ a.case_number }}')">סווג ←</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if is_manager and anomalies %}
+<div class="card" style="border-color:var(--warn);border-width:2px">
+  <div class="card-head"><span class="dot" style="background:var(--warn);box-shadow:none"></span><h2>דיווחי חריגה מעובדים ({{ anomalies|length }})</h2></div>
+  <p class="hint">חריגות שדווחו ע"י עובדים שלא יכלו להמשיך. סווגו מחדש או טפלו בהתאם.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>מס' תיק</th><th>עובד</th><th>משימה</th><th>תיאור החריגה</th><th>דווח בתאריך</th></tr></thead>
+      <tbody>
+        {% for an in anomalies %}
+        <tr>
+          <td class="mono">{{ an.case_number }}</td>
+          <td>{{ an.employee_name }}</td>
+          <td>{{ an.task_name }}</td>
+          <td style="max-width:280px">{{ an.description }}</td>
+          <td class="mono">{{ an.created_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-head"><span class="dot"></span><h2>משימות · ממוינות לפי דחיפות</h2>
+    {% if not is_manager %}<button class="btn btn-ghost btn-sm" onclick="location.reload()" style="margin-inline-start:auto">רענון</button>{% endif %}
+  </div>
+  <div class="legend"><b>דרגת עדיפות:</b> 1 = נמוכה · 2 = מתחת לבינונית · 3 = בינונית · 4 = גבוהה · 5 = דחוף ביותר.</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>מס' תיק</th><th>מספר רכב</th>
+          {% if is_manager %}<th>עובד</th><th>תפקיד</th>{% endif %}
+          <th>משימה</th><th>דדליין</th><th>עדיפות</th>
+          {% if is_manager %}<th>מצב</th><th>התראה לעובד</th>
+          {% else %}<th>סטטוס</th><th>פעולה</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+        <tr class="{{ 'row-done' if t.status=='Completed' }}">
+          <td class="mono">{{ t.task_id }}</td>
+          <td class="mono">{{ t.case_number }}</td>
+          <td class="mono">{{ t.vehicle_number }}</td>
+          {% if is_manager %}
+          <td>{{ t.employee_name }}</td>
+          <td>{{ {'Painter':'צבעי','BodyWorker':'פחח','WorkManager':'מנהל עבודה','Driver':'נהג'}.get(t.employee_role, t.employee_role) }}</td>
+          {% endif %}
+          <td>{{ t.task_name }}</td>
+          <td class="mono">{{ t.deadline }}</td>
+          <td><span class="prio prio-{{ t.priority_level }}">עדיפות {{ t.priority_level }}</span></td>
+          {% if is_manager %}
+          <td><span class="badge {{ t.status|lower }}">{{ task_status_he[t.status] }}</span></td>
+          <td class="actions">
+            <button class="btn-bell" title="שליחת התראה לעובד" onclick="notify({{ t.task_id }}, '{{ t.employee_name }}')">🔔</button>
+            {% if t.status=='Completed' %}
+            <select class="reassign-sel" id="reassign-{{ t.task_id }}">
+              {% for e in employees %}<option value="{{ e.employee_id }}">{{ e.full_name }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="release({{ t.task_id }})">שחרר לעובד</button>
+            <button class="btn btn-primary btn-sm" onclick="carReady({{ t.task_id }})">הרכב מוכן</button>
+            {% endif %}
+          </td>
+          {% else %}
+          <td>
+            <select class="status-sel" onchange="updateStatus({{ t.task_id }}, this.value)">
+              {% for s in task_statuses %}<option value="{{ s }}" {{ 'selected' if s==t.status }}>{{ task_status_he[s] }}</option>{% endfor %}
+            </select>
+          </td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openAnomaly({{ t.task_id }})">דיווח חריגה</button></td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="center muted">אין משימות להצגה.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div id="alert" class="alert"></div>
+</div>
+
+{% if not is_manager %}
+<!-- מודאל דיווח חריגה -->
+<div id="anomaly-overlay" class="modal-overlay">
+  <div class="modal-box" style="max-width:480px">
+    <h3>דיווח על חריגה</h3>
+    <p class="muted">תאר/י מה מונע המשך טיפול במשימה זו.</p>
+    <textarea id="anomaly-text" placeholder="לדוגמה: חסר חלק חלופי / נזק נוסף שהתגלה..." style="margin:12px 0"></textarea>
+    <div class="btn-row" style="justify-content:center">
+      <button class="btn btn-primary" onclick="sendAnomaly()">שליחה למנהל</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('anomaly-overlay').classList.remove('show')">ביטול</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if pending_notifications %}
+<!-- חלון התראות קופץ לעובד -->
+<div id="notif-overlay" class="modal-overlay show">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-icon" style="background:var(--cyan-05);color:var(--cyan-deep)">🔔</div>
+    <h3>התראות חדשות עבורך</h3>
+    <div id="notif-list">
+      {% for n in pending_notifications %}
+      <div class="notif-item" data-id="{{ n.notification_id }}">
+        <span>{{ n.message }}</span>
+        <button class="notif-x" onclick="dismissNotif({{ n.notification_id }}, this)">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if is_manager %}
+<!-- מודאל סיווג תיק -->
+<div id="assign-overlay" class="modal-overlay">
+  <div class="modal-box" style="max-width:520px;text-align:right">
+    <h3 id="assign-title" style="text-align:center">סיווג תיק</h3>
+    <div class="field"><label>עובד <span class="req">*</span></label>
+      <select id="as-emp">{% for e in employees %}<option value="{{ e.employee_id }}">{{ e.full_name }} ({{ {'Painter':'צבעי','BodyWorker':'פחח','WorkManager':'מנהל עבודה','Driver':'נהג'}.get(e.role, e.role) }})</option>{% endfor %}</select></div>
+    <div class="field"><label>תחנה <span class="req">*</span></label>
+      <select id="as-station">{% for s in stations %}<option value="{{ s }}">{{ station_he[s] }}</option>{% endfor %}</select></div>
+    <div class="field"><label>תיאור המשימה (מלל)</label><textarea id="as-name" placeholder="לא חובה — לדוגמה: יישור פגוש קדמי והכנה לצבע"></textarea></div>
+    <div class="form-grid">
+      <div class="field"><label>דדליין <span class="req">*</span></label><input type="date" id="as-deadline"></div>
+      <div class="field"><label>עדיפות (1-5) <span class="req">*</span></label><select id="as-prio"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></div>
+    </div>
+    <div id="assign-err" class="alert" style="margin-top:0"></div>
+    <div class="btn-row" style="justify-content:center">
+      <button class="btn btn-primary" onclick="sendAssign()">צור משימה</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('assign-overlay').classList.remove('show')">ביטול</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showAlert(ok,msg){ const el=document.getElementById("alert"); el.className="alert show "+(ok?"ok":"error"); el.textContent=msg; }
+async function post(url, data){ const fd=new FormData(); for(const k in data) fd.append(k,data[k]); const r=await fetch(url,{method:"POST",body:fd}); return r.json(); }
+
+{% if is_manager %}
+let assignCase=null;
+function openAssign(id, num){ assignCase=id; document.getElementById("assign-title").textContent="סיווג תיק "+num; document.getElementById("as-name").value=""; document.getElementById("assign-overlay").classList.add("show"); }
+async function sendAssign(){
+  const emp=document.getElementById("as-emp").value;
+  const station=document.getElementById("as-station").value;
+  const deadline=document.getElementById("as-deadline").value;
+  const err=document.getElementById("assign-err");
+  if(!emp || !station || !deadline){
+    err.className="alert show error"; err.textContent="יש למלא עובד, תחנה ודדליין (שדות חובה).";
+    return;
+  }
+  err.className="alert";
+  const d=await post("{{ url_for('assign_case') }}",{
+    work_case_id:assignCase, employee_id:emp, station:station,
+    task_name:document.getElementById("as-name").value || "טיפול כללי",
+    deadline:deadline, priority:document.getElementById("as-prio").value});
+  if(d.ok){ document.getElementById("assign-overlay").classList.remove("show"); showAlert(true,d.message); setTimeout(()=>location.reload(),900); }
+  else { err.className="alert show error"; err.textContent=d.error; }
+}
+async function notify(id, emp){ const d=await post("{{ url_for('task_notify') }}",{task_id:id,employee_name:emp}); showAlert(d.ok,d.ok?d.message:d.error); }
+async function release(id){
+  const sel=document.getElementById("reassign-"+id);
+  const d=await post("{{ url_for('task_advance_chain') }}",{task_id:id,next_employee_id:sel.value});
+  showAlert(d.ok,d.ok?d.message:d.error); if(d.ok) setTimeout(()=>location.reload(),900);
+}
+async function carReady(id){ const d=await post("{{ url_for('car_ready') }}",{task_id:id}); showAlert(d.ok,d.ok?d.message:d.error); if(d.ok) setTimeout(()=>location.reload(),900); }
+{% else %}
+async function updateStatus(id, status){ const d=await post("{{ url_for('task_update_status') }}",{task_id:id,status:status}); showAlert(d.ok,d.ok?d.message:d.error); }
+let anomalyTask=null;
+function openAnomaly(id){ anomalyTask=id; document.getElementById("anomaly-text").value=""; document.getElementById("anomaly-overlay").classList.add("show"); }
+async function sendAnomaly(){
+  const desc=document.getElementById("anomaly-text").value;
+  const d=await post("{{ url_for('report_anomaly') }}",{task_id:anomalyTask,description:desc});
+  document.getElementById("anomaly-overlay").classList.remove("show");
+  showAlert(d.ok,d.ok?d.message:d.error);
+}
+async function dismissNotif(id, btn){
+  await post("{{ url_for('notify_seen') }}",{notification_id:id});
+  btn.closest(".notif-item").remove();
+  if(!document.querySelectorAll(".notif-item").length) document.getElementById("notif-overlay").classList.remove("show");
+}
+{% endif %}
+</script>
+{% endblock %}

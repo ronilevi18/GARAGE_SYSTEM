@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}כניסה — אור הבזק{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="login-rail">
+    <div class="rail-bolt">
+      <svg viewBox="0 0 120 200" width="150" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="bg" x1="0" y1="0" x2="120" y2="200" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#16D6F0"/><stop offset="1" stop-color="#00A6C4"/></linearGradient></defs>
+        <path d="M70 8 L24 104 L54 104 L40 192 L100 84 L66 84 Z" fill="url(#bg)"/>
+      </svg>
+    </div>
+    <div class="rail-brand">
+      <div class="rail-name">אור הבזק</div>
+      <div class="rail-slogan">המוסך שמחזיר אתכם לכביש</div>
+    </div>
+    <div class="rail-foot">מערכת ניהול מידע · מוסך</div>
+  </div>
+
+  <div class="login-form-side">
+    <div class="login-card">
+      <h3 class="center">כניסה למערכת</h3>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+      {% endwith %}
+      <form method="post" action="{{ url_for('login') }}">
+        <div class="field"><label for="username">שם משתמש</label><input type="text" id="username" name="username" autofocus required></div>
+        <div class="field"><label for="password">סיסמה</label><input type="password" id="password" name="password" required></div>
+        <button type="submit" class="btn btn-primary btn-block">כניסה למערכת ←</button>
+      </form>
+      <div class="demo-users">
+        <div class="du-title">משתמשי הדגמה</div>
+        <div class="row"><span>מנהל מוסך</span><b>manager / 1234</b></div>
+        <div class="row"><span>מנכ"ל</span><b>ceo / 1234</b></div>
+        <div class="row"><span>מנהל עבודה</span><b>workmgr / 1234</b></div>
+        <div class="row"><span>פחח</span><b>body / 1234</b></div>
+        <div class="row"><span>צבעי</span><b>painter / 1234</b></div>
+        <div class="row"><span>נהג</span><b>driver / 1234</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

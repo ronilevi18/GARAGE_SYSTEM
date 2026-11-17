@@ -1,0 +1,31 @@
+{% extends "shell.html" %}
+{% set active = 'log' %}
+{% block screen_title %}יומן מערכת{% endblock %}
+{% block screen_tag %}AUDIT{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h2 class="page-title">יומן מערכת · Audit Trail</h2>
+  <p class="page-sub">כל פעולה משמעותית מתועדת אוטומטית: סוג הפעולה, המשתמש שביצע, הישות שהושפעה וחותמת זמן מדויקת.</p>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>פעולה</th><th>משתמש</th><th>ישות</th><th>מזהה</th><th>חותמת זמן</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="mono">{{ r.change_id }}</td>
+          <td>{{ r.action_type }}</td>
+          <td>{{ r.user_name }}</td>
+          <td>{{ r.entity_name }}</td>
+          <td class="mono">{{ r.entity_id }}</td>
+          <td class="mono">{{ r.timestamp }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="center muted">היומן ריק עדיין.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

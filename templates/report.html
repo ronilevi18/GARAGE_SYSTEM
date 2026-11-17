@@ -1,0 +1,145 @@
+{% extends "shell.html" %}
+{% set active = 'report' %}
+{% block content %}
+<div class="page-head">
+  <h2 class="page-title">דוח זמן טיפול מורכב</h2>
+  <p class="page-sub">סננו תיקים פתוחים לפי תאריכים וסוג עבודה.<br>המערכת מחשבת זמן טיפול, התפלגות לפי סוג עבודה, וזמן שהייה בכל תחנה בשרשרת — לזיהוי היכן הרכב תקוע. ניתן לייצא לאקסל.</p>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="dot"></span><h2>סינון הדוח</h2></div>
+  <div class="form-grid form-grid-3">
+    <div class="field"><label>מתאריך</label><input type="date" id="date_from"></div>
+    <div class="field"><label>עד תאריך</label><input type="date" id="date_to"></div>
+    <div class="field"><label>סוג עבודה</label><select id="work_type"><option value="All">הכול</option><option value="BodyRepair">פחחות</option><option value="PaintServices">צבע</option><option value="ThirdPartyAccident">תאונת צד ג'</option></select></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="generate()">הפקה ושמירת דוח</button>
+    <button id="export-btn" class="btn btn-ghost" onclick="exportExcel()" style="display:none">⬇ ייצוא לאקסל</button>
+  </div>
+  <div id="alert" class="alert"></div>
+</div>
+
+<div id="results" style="display:none;">
+  <div class="stats">
+    <div class="stat accent"><div class="n" id="s-total">0</div><div class="l">תיקים פתוחים</div></div>
+    <div class="stat"><div class="n" id="s-avg">0</div><div class="l">ממוצע שעות בטיפול</div></div>
+    <div class="stat bad"><div class="n" id="s-bn">0</div><div class="l">צווארי בקבוק (מעל 48ש' בתחנה)</div></div>
+  </div>
+
+  <div class="report-cols equal-graphs">
+    <div class="card">
+      <div class="card-head"><span class="dot"></span><h2>התפלגות לפי סוג טיפול</h2></div>
+      <div class="pie-wrap"><svg id="pie" viewBox="0 0 200 200" width="170" height="170"></svg></div>
+      <div id="pie-legend" class="pie-legend"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="dot"></span><h2>זמן שהייה בתחנות</h2></div>
+      <div id="stations" class="stations-vertical"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="dot"></span><h2>פירוט לפי תיק</h2>
+      <div class="filter-inline" style="margin-inline-start:auto">
+        <label>צוואר בקבוק:</label>
+        <select id="bn-filter" onchange="renderRows()">
+          <option value="all">הכול</option>
+          <option value="כן">כן</option>
+          <option value="לא">לא</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>מס' תיק</th><th>מספר רכב</th><th>סוג</th><th>תחנה נוכחית</th><th>שעות שהתיק פתוח</th><th>שעות הרכב בתחנה הנוכחית</th><th>צוואר בקבוק</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PIE_COLORS = { BodyRepair: "#00C2DE", PaintServices: "#7FE3F0", ThirdPartyAccident: "#1E3A52" };
+let lastRows = [];
+function showAlert(ok,msg){ const el=document.getElementById("alert"); el.className="alert show "+(ok?"ok":"error"); el.textContent=msg; }
+
+function drawPie(pie){
+  const svg=document.getElementById("pie"); svg.innerHTML="";
+  const total=pie.reduce((s,p)=>s+p.count,0);
+  const leg=document.getElementById("pie-legend"); leg.innerHTML="";
+  if(total===0){ svg.innerHTML='<text x="100" y="105" text-anchor="middle" fill="#8593A8">אין נתונים</text>'; return; }
+  let a0=-Math.PI/2;
+  // אם יש רק קטגוריה אחת — מציירים עיגול מלא
+  const active=pie.filter(p=>p.count>0);
+  if(active.length===1){
+    const circ=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    circ.setAttribute("cx","100");circ.setAttribute("cy","100");circ.setAttribute("r","85");
+    circ.setAttribute("fill",PIE_COLORS[active[0].key]); svg.appendChild(circ);
+  } else {
+    pie.forEach(p=>{
+      const frac=p.count/total; if(frac<=0){return;} const a1=a0+frac*2*Math.PI; const big=frac>0.5?1:0;
+      const x0=100+85*Math.cos(a0),y0=100+85*Math.sin(a0),x1=100+85*Math.cos(a1),y1=100+85*Math.sin(a1);
+      const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+      path.setAttribute("d",`M100,100 L${x0},${y0} A85,85 0 ${big},1 ${x1},${y1} Z`);
+      path.setAttribute("fill",PIE_COLORS[p.key]);path.setAttribute("stroke","#fff");path.setAttribute("stroke-width","2.5");
+      svg.appendChild(path); a0=a1;
+    });
+  }
+  pie.forEach(p=>{ const item=document.createElement("div"); item.className="leg-item";
+    item.innerHTML=`<span class="sw" style="background:${PIE_COLORS[p.key]}"></span>${p.label} — ${p.percent}% (${p.count})`; leg.appendChild(item); });
+  const hole=document.createElementNS("http://www.w3.org/2000/svg","circle");
+  hole.setAttribute("cx","100");hole.setAttribute("cy","100");hole.setAttribute("r","46");hole.setAttribute("fill","#fff");svg.appendChild(hole);
+  const t1=document.createElementNS("http://www.w3.org/2000/svg","text");
+  t1.setAttribute("x","100");t1.setAttribute("y","98");t1.setAttribute("text-anchor","middle");t1.setAttribute("font-size","26");t1.setAttribute("font-weight","700");t1.setAttribute("fill","#0E1B2E");t1.textContent=total;svg.appendChild(t1);
+  const t2=document.createElementNS("http://www.w3.org/2000/svg","text");
+  t2.setAttribute("x","100");t2.setAttribute("y","116");t2.setAttribute("text-anchor","middle");t2.setAttribute("font-size","11");t2.setAttribute("fill","#5B6B7D");t2.textContent="תיקים";svg.appendChild(t2);
+}
+
+function drawStations(stations){
+  const box=document.getElementById("stations"); box.innerHTML="";
+  if(!stations.length){ box.innerHTML='<p class="muted">אין נתוני תחנות.</p>'; return; }
+  const max=Math.max(...stations.map(s=>s.total))||1;
+  stations.forEach(s=>{
+    const col=document.createElement("div"); col.className="vbar-col";
+    col.innerHTML=`<div class="vbar-val mono">${s.total}ש'</div>
+      <div class="vbar-track"><div class="vbar-fill" style="height:${Math.max(6,s.total/max*100)}%"></div></div>
+      <div class="vbar-label">${s.station}</div>`;
+    box.appendChild(col);
+  });
+}
+
+function renderRows(){
+  const filter=document.getElementById("bn-filter").value;
+  const tb=document.getElementById("rows"); tb.innerHTML="";
+  lastRows.filter(rw=>filter==="all"||rw.bottleneck===filter).forEach(rw=>{
+    const tr=document.createElement("tr");
+    const bn=rw.bottleneck==="כן"?"yes":"no";
+    tr.innerHTML=`<td class="mono">${rw.case_number}</td><td class="mono">${rw.vehicle_number}</td><td>${rw.work_type}</td>
+      <td>${rw.current_station}</td><td class="mono">${rw.hours_case_open}</td><td class="mono">${rw.hours_in_current_station}</td>
+      <td><span class="badge ${bn}">${rw.bottleneck}</span></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+async function generate(){
+  const fd=new FormData();
+  ["date_from","date_to","work_type"].forEach(id=>fd.append(id,document.getElementById(id).value));
+  const r=await fetch("{{ url_for('report_generate') }}",{method:"POST",body:fd});
+  const d=await r.json(); showAlert(d.ok, d.ok?d.message:d.error);
+  if(!d.ok) return;
+  const m=d.metrics;
+  document.getElementById("s-total").textContent=m.total_cases;
+  document.getElementById("s-avg").textContent=m.average_open_hours;
+  document.getElementById("s-bn").textContent=m.bottlenecks.length;
+  drawPie(m.pie); drawStations(m.stations);
+  lastRows=m.rows; renderRows();
+  document.getElementById("results").style.display="block";
+  document.getElementById("export-btn").style.display="inline-flex";
+}
+function exportExcel(){ window.location.href="{{ url_for('report_export') }}"; }
+</script>
+{% endblock %}
